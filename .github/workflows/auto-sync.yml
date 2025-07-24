@@ -83,12 +83,17 @@ jobs:
             ```
 
             _This PR was generated automatically._
-          head: auto-sync-upstream
+          head: ${{ github.actor }}:auto-sync-upstream
           base: master
           labels: |
             auto-sync
             ready-to-merge
-
+            
+      - name: Debug PR existence
+        run: gh pr list --head auto-sync-upstream --state open
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          
       # 9. 启用 PR 自动合并（需要仓库分支保护允许 auto-merge）
       - name: Enable auto-merge for PR
         if: steps.check.outputs.commits_ahead != '0'
