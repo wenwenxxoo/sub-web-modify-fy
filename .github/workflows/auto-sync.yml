@@ -30,7 +30,7 @@ jobs:
       - name: Create auto-sync-upstream branch
         run: |
           git checkout -B auto-sync-upstream
-          git reset --hard upstream/main
+          git reset --hard upstream/master
 
       # Step 4: 设置 Git 凭证以支持推送
       - name: Set Git credentials
@@ -49,7 +49,7 @@ jobs:
         uses: repo-sync/pull-request@v2
         with:
           source_branch: auto-sync-upstream
-          destination_branch: main
+          destination_branch: master
           pr_title: '🔄 Sync from upstream'
           pr_body: 'Auto-synced from upstream repo: https://github.com/youshandefeiyang/sub-web-modify'
           github_token: ${{ secrets.GH_TOKEN }}
