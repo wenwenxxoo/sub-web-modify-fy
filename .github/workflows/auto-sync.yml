@@ -1,40 +1,40 @@
-# 📄 .github/workflows/auto-sync.yml
-# 自动从 upstream 仓库同步最新代码，提交 PR 并自动合并
-
 name: 🔄 Auto Sync from Upstream
 
+# 定时触发：每天 UTC 2 点运行一次（即北京时间早上 10 点）
 on:
   schedule:
-    - cron: '0 2 * * *' # 每天北京时间 10:00（UTC+8）
-  workflow_dispatch:   # 支持手动触发
+    - cron: '0 2 * * *'
+  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
+    # 设置环境变量，GH_TOKEN 用于 gh cli 和 GitHub API 授权操作
     env:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}  # 需要你在仓库 Secrets 里配置，PAT，需有 repo 权限
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     steps:
-      # 1. 检出自己的代码库，不自动使用默认 token
+      # 1. 检出当前仓库代码（wenwenxxoo/sub-web-modify-fy）
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      # 2. 设置提交身份为 github-actions[bot]
+      # 2. 设置 Git 提交人身份（自动机器人）
       - name: Set Git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # 3. 添加 upstream 远程仓库并拉取最新数据
+      # 3. 添加上游仓库（youshandefeiyang/sub-web-modify）为 remote，并拉取最新内容
       - name: Add upstream remote and fetch
         run: |
           git remote add upstream https://github.com/youshandefeiyang/sub-web-modify.git
           git fetch upstream
 
-      # 4. 检查 upstream/master 是否有新的提交
+      # 4. 检查上游是否有新提交（HEAD..upstream/master）
       - name: Check upstream changes
         id: check
         run: |
@@ -42,12 +42,12 @@ jobs:
           COMMITS=$(git rev-list HEAD..upstream/master --count)
           echo "commits_ahead=$COMMITS" >> $GITHUB_OUTPUT
 
-      # 5. 如果没有新提交，则跳过后续步骤
+      # 5. 如果没有新提交，跳过后续步骤
       - name: No updates, skip sync
         if: steps.check.outputs.commits_ahead == '0'
         run: echo "No updates from upstream."
 
-      # 6. 有新提交则创建同步分支，切换并推送（必须先改 origin URL 加 token）
+      # 6. 如果有新提交，创建新分支 auto-sync-upstream 并强推到当前仓库
       - name: Create sync branch and push
         if: steps.check.outputs.commits_ahead != '0'
         run: |
@@ -55,7 +55,7 @@ jobs:
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
           git push origin auto-sync-upstream --force
 
-      # 7. 生成 commit 日志，用于 PR 描述
+      # 7. 生成变更日志（用于 PR 描述）
       - name: Generate commit log
         id: changelog
         if: steps.check.outputs.commits_ahead != '0'
@@ -65,8 +65,8 @@ jobs:
           echo "$LOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # 8. 创建或更新同步 PR
-      - name: Create Pull Request
+      # 8. 创建或更新 PR，base=master，head=auto-sync-upstream
+      - name: Create or update PR
         if: steps.check.outputs.commits_ahead != '0'
         id: create_pr
         uses: peter-evans/create-pull-request@v6
@@ -83,22 +83,17 @@ jobs:
             ```
 
             _This PR was generated automatically._
-          head: ${{ github.actor }}:auto-sync-upstream
+          head: auto-sync-upstream
           base: master
           labels: |
             auto-sync
             ready-to-merge
-            
-      - name: Debug PR existence
-        run: gh pr list --head auto-sync-upstream --state open
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          
-      # 9. 启用 PR 自动合并（需要仓库分支保护允许 auto-merge）
-      - name: Enable auto-merge for PR
+
+      # 9. 启用 PR 的自动合并功能（前提：仓库设置中允许 auto-merge）
+      - name: Enable PR auto-merge
         if: steps.check.outputs.commits_ahead != '0'
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
           token: ${{ secrets.GH_TOKEN }}
           pull-request-number: ${{ steps.create_pr.outputs.pull-request-number }}
-          merge-method: squash
+          merge-method: squash  # 可选值还有 merge / rebase
