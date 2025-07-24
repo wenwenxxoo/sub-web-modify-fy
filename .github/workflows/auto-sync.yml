@@ -35,6 +35,14 @@ jobs:
           git checkout -b auto-sync-upstream
           git merge upstream/master --allow-unrelated-histories -m "chore: sync upstream"
 
+          
+      - name: Set Git credentials and remote URL with token
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/wenwenxxoo/sub-web-modify-fy.git
+
+          
       # Step 5: 将同步结果 push 到 fork 仓库
       - name: Push sync branch
         run: |
