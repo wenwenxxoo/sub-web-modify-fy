@@ -1,76 +1,80 @@
 name: ⬆️ Auto Sync Upstream
 
 on:
-  workflow_dispatch:    # 支持手动触发
+  # 支持手动触发
+  workflow_dispatch:
+  # 定时触发，每天 UTC 时间 00:00（北京时间 8 点）
   schedule:
-    - cron: '0 0 * * *' # 每天 00:00 触发（UTC 时间，+8 为早上 8 点）
+    - cron: '0 0 * * *'
 
 jobs:
   auto-sync:
     runs-on: ubuntu-latest
 
     env:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }} # 供 gh 命令使用
+      # 需要在仓库 Secrets 里配置 GitHub 个人访问令牌（PAT），且需有 repo 权限
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     steps:
-      # Step 1: 检出目标仓库代码
+      # 1️⃣ 检出当前仓库完整代码（含所有分支和提交历史）
       - name: Checkout target repo
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_TOKEN }}
-          fetch-depth: 0
+          fetch-depth: 0  # 需要完整历史，方便创建分支和比较
 
-      # Step 2: 添加 upstream 仓库并拉取更新
+      # 2️⃣ 添加 upstream 远程仓库并拉取最新代码
       - name: Add upstream remote and fetch
         run: |
           git remote add upstream https://github.com/youshandefeiyang/sub-web-modify.git
           git fetch upstream
 
-      # Step 3: 创建或更新 auto-sync-upstream 分支
-      - name: Create auto-sync-upstream branch
-        run: |
-          git checkout -B auto-sync-upstream
-          git reset --hard upstream/master
-
-      # Step 4: 设置 Git 凭证以支持推送
-      - name: Set Git credentials
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/wenwenxxoo/sub-web-modify-fy.git
-
-      # Step 5: 强推分支到目标仓库
-      - name: Force push sync branch
+      # 3️⃣ 创建或重置本地 auto-sync-upstream 分支到 upstream/master
+      - name: Create or reset sync branch
         run: |
           git checkout -B auto-sync-upstream upstream/master
+
+      # 4️⃣ 配置 Git 提交身份和 origin 远程仓库凭证（用 token 授权推送）
+      - name: Set Git credentials
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/wenwenxxoo/sub-web-modify-fy.git
+
+      # 5️⃣ 强制推送 auto-sync-upstream 分支到你仓库的 origin（覆盖远程分支）
+      - name: Push sync branch to origin
+        run: |
           git push origin auto-sync-upstream --force
 
-      # Step 6: 创建或更新 PR（自动 merge）
-      - name: Create or update PR
+      # 6️⃣ 使用 repo-sync/pull-request@v2 创建或更新 PR，自动同步 upstream 代码到 master
+      - name: Create or update Pull Request
+        id: create_pr
         uses: repo-sync/pull-request@v2
         with:
           github_token: ${{ secrets.GH_TOKEN }}
-          source_branch: auto-sync-upstream
-          destination_branch: master
-          pr_title: '🔄 Sync from upstream'
-          pr_body: 'Auto-synced from upstream repo: https://github.com/youshandefeiyang/sub-web-modify'
-          pr_allow_empty: false
-          pr_draft: false
+          source_branch: auto-sync-upstream      # 本地同步分支
+          destination_branch: master             # 目标分支
+          pr_title: '🔄 Sync from upstream'     # PR 标题
+          pr_body: 'Auto-synced from upstream repo: https://github.com/youshandefeiyang/sub-web-modify' # PR 描述
+          pr_allow_empty: false                  # 不允许空的 PR
+          pr_draft: false                       # 不是草稿 PR
 
-      # Step 7: 等待 PR 创建成功（可选防止 PR 不存在）
+      # 7️⃣ 等待 5 秒，确保 PR 创建完成（防止 race condition）
       - name: Wait 5 seconds
         run: sleep 5
 
-      # Step 8: 开启 PR auto-merge（需要 repo 设置支持）
+      # 8️⃣ 启用该 PR 的自动合并功能，合并方式为 squash（需仓库支持 auto-merge）
       - name: Enable auto-merge for PR
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
           token: ${{ secrets.GH_TOKEN }}
+          pull-request-number: ${{ steps.create_pr.outputs.pull-request-number }}
           merge-method: squash
           repository: wenwenxxoo/sub-web-modify-fy
 
-      # Step 9: 尝试立即触发合并（如果可以的话）
+      # 9️⃣ 尝试立即用 gh CLI 触发自动合并（确保自动合并能及时执行）
       - name: Try merging the PR
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          gh pr merge -R "wenwenxxoo/sub-web-modify-fy" --squash --auto --match-head-commit
+          gh pr merge ${{ steps.create_pr.outputs.pull-request-number }} -R "wenwenxxoo/sub-web-modify-fy" --squash --auto --delete-branch
