@@ -48,7 +48,7 @@ jobs:
       - name: Create or update PR
         uses: repo-sync/pull-request@v2
         with:
-          source_branch: auto-sync-upstream
+          source_branch: wenwenxxoo:auto-sync-upstream
           destination_branch: master
           pr_title: '🔄 Sync from upstream'
           pr_body: 'Auto-synced from upstream repo: https://github.com/youshandefeiyang/sub-web-modify'
